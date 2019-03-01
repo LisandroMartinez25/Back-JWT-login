@@ -1,6 +1,7 @@
 'use strict'
 let path = require('path');
 const sha512 = require('js-sha512').sha512;
+let jwt = require('jsonwebtoken');
 
 const config = require('../dbConfig.js');
 const knex = require('knex');
@@ -29,30 +30,38 @@ function AddUsuario(req, res){
 	    avatar = req.file.filename;
 	}
 
-	const usuario = {
-        nombre: req.body.nombre,
-        edad: req.body.edad,
-        avatar: avatar,
-        email: req.body.email,
-        pass: sha512(req.body.pass),
-        rol: req.body.rol
-    };
-	conn('Usuario').insert(usuario).then(result => {
-		res.status(200).json({
-			// succes: true, 
-			resp: "Usuario guardado correctamente",
-			data: result[0],
-			file: req.file
+    const pass = req.body.pass
+    if( /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[$@$!%*?&])[A-Za-z\d$@$!%*?&]{10,60}[^'\s]/.exec(pass)) {
+        const usuario = {
+            nombre: req.body.nombre,
+            edad: req.body.edad,
+            avatar: avatar,
+            email: req.body.email,
+            pass: sha512(req.body.pass),
+            rol: req.body.rol
+        };
+        conn('Usuario').insert(usuario).then(result => {
+            res.status(200).json({
+                succes: true, 
+                resp: "Usuario guardado correctamente",
+                data: result[0],
+                file: req.file
 
-		});
-	}).catch(error => {
-		res.status(500).send({
-            resp: 'error',
-            error: `${error}`,
-            req: req.body
+            });
+        }).catch(error => {
+            res.status(500).send({
+                succes: false,
+                resp: 'error',
+                error: `${error}`,
+                req: req.body
+            });
         });
-	});
-	
+    } else {
+        res.status(500).send({
+            succes: false,
+            resp : 'LA contraseña debe contener números, caráctes especiales y al menos una mayúsicula'
+        })
+    }       
 }
 
 /*=====  End of Funcion para agregar usuario  ======*/
@@ -63,14 +72,14 @@ function AddUsuario(req, res){
 =========================================*/
 
 function UpdateUsuario(req, res){
-    if(1) {
+    if (req.usuario.rol === 1 || req.usuario.nombre === req.body.nombre) {
         const idUsuario = req.params.idUsuario;
         const usuario = {
             nombre: req.body.nombre,
             edad: req.body.edad,
             email: req.body.email,
             pass: sha512(req.body.pass),
-            rol: req.body.rol
+            rol: req.body.rol || 2
         };
         conn('Usuario').where('idUsuario', idUsuario).update(usuario).then(result => {
             if (result != 0) {
@@ -168,17 +177,25 @@ function GetUsuarios(req, res){
 
 function DeleteUsuario(req, res){
 	let idUsuario = req.params.idUsuario;
-
-	conn('Usuario').where('idUsuario', idUsuario).del().then( result => {
-		if(result == 1)
-			res.status(200).send({
-                resp: "Usuario eliminado"
-            });
-		else
-			res.status(200).send({resp: 'error al eliminar el usuario'});
-	}).catch(error => {
-		res.status(500).send({resp: 'error', error: `${error}` });
-	});
+    if (req.usuario.rol = 1 || req.usuario.idUsuario === idUsuario) {
+        conn('Usuario').where('idUsuario', idUsuario).del().then( result => {
+            if(result == 1)
+                res.status(200).send({
+                    succes: true,
+                    resp: "Usuario eliminado"
+                });
+            else
+                res.status(200).send({resp: 'error al eliminar el usuario'});
+        }).catch(error => {
+            res.status(500).send({resp: 'error', error: `${error}` });
+        });
+    } else {
+        res.status(500).send({
+            succes: false,
+            resp: "No tienes los permisos para eliminar un usuario"
+        });
+    }
+	
 }
 
 /*=====  End of Elimincación de un usuario  ======*/
@@ -204,7 +221,7 @@ function Autentication(req, res){
 	conn('Usuario').where({
         nombre: req.params.nombre,
         pass: sha512(req.params.pass)
-    }).select('nombre', 'edad', 'avatar', 'email', 'rol').then(usuario => {
+    }).select('idUsuario', 'nombre', 'edad', 'avatar', 'email', 'rol').then(usuario => {
 		if(!usuario[0]){
 			res.status(200).send({
                 succes: false,
@@ -212,9 +229,13 @@ function Autentication(req, res){
 			});
 		}
 		else{
+            const token = jwt.sign({
+                usuario: usuario[0]
+            }, process.env.SEED_TOKEN, { expiresIn: process.env.CAD_TOKEN });
 			res.status(200).send({
                 succes: true,
-				resp: usuario[0]
+				resp: usuario[0],
+                token: token
 			});
 		}
 	}).catch(error => {
@@ -222,7 +243,29 @@ function Autentication(req, res){
 	});
 }
 
-/*=====  End of logue  ======*/
+/*=====  End of logueo  ======*/
+
+
+/*=================================
+=            VerifToken           =
+=================================*/
+
+function VerifToken(req, res, next){
+    let token = req.get('token');
+    jwt.verify(token, process.env.SEED_TOKEN, (err, decoded) => {
+        if (err) {
+            res.status(500).send({
+                succes:false,
+                error: err
+            });
+        } else {
+            req.usuario = decoded.usuario;
+            next();
+        }
+    })
+}
+
+/*=====  End of VerifToken  ======*/
 
 
 /*==================================================
@@ -236,7 +279,8 @@ module.exports = {
 	GetUsuario,
 	GetAvatar,
     Autentication,
-    GetUsuarios
+    GetUsuarios,
+    VerifToken
 }
 
 /*=====  End of Exportación de los métodos  ======*/

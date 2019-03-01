@@ -32,11 +32,11 @@ function subirAvatar(req, res, next) {
 }
 
 api.post('/AddUsuario', subirAvatar, usuarioController.AddUsuario);
-api.put('/UpdateUsuario/:idUsuario', usuarioController.UpdateUsuario);
-api.get('/GetUsuario/:idUsuario', usuarioController.GetUsuario);
-api.get('/GetUsuarios', usuarioController.GetUsuarios);
+api.put('/UpdateUsuario/:idUsuario', usuarioController.VerifToken, usuarioController.UpdateUsuario);
+api.get('/GetUsuario/:idUsuario', usuarioController.VerifToken, usuarioController.GetUsuario);
+api.get('/GetUsuarios', usuarioController.VerifToken, usuarioController.GetUsuarios);
 api.get('/Autentication/:nombre/:pass', usuarioController.Autentication)
-api.delete('/DeleteUsuario/:idUsuario', usuarioController.DeleteUsuario);
+api.delete('/DeleteUsuario/:idUsuario', usuarioController.VerifToken, usuarioController.DeleteUsuario);
 api.get('/GetAvatar/:avatar', usuarioController.GetAvatar);
 
 module.exports = api;
